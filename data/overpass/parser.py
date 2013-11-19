@@ -1,3 +1,5 @@
+from pprint import pprint #RYM
+import json #RYM
 import cgi
 import requests
 
@@ -167,7 +169,7 @@ def determine_icon(tags):
   icon = icon.replace('-', '_')
   return icon
 
-def write_elements(f, e):
+def write_elements(f, e, json_all):
   lat = e.get('lat', None)
   lon = e.get('lon', None)
   typ = e['type']
@@ -194,45 +196,79 @@ def write_elements(f, e):
     name = '%s %s' % (typ, ide)
 
   icon = determine_icon(tags)
+
+  # dict to hold the data to output as json
+  json_el = {"name": name.encode("utf-8"), "url": ("http://openstreetmap.org/browse/%s/%s" % (typ, ide)).encode("utf-8"), "type": typ, "id": ide}
   popup = '<b>%s</b> <a href=\\"http://openstreetmap.org/browse/%s/%s\\" target=\\"_blank\\">*</a><hr/>' % (name, typ, ide)
   if 'addr:street' in tags:
     popup += '%s %s<br/>' % (tags.get('addr:street', ''), tags.get('addr:housenumber', ''))
+    json_el["addr_street"] = ('%s %s' % (tags.get('addr:housenumber', ''), tags.get('addr:street', ''))).encode("utf-8")
   if 'addr:city' in tags:
     popup += '%s %s<br/>' % (tags.get('addr:postcode', ''), tags.get('addr:city', ''))
+    json_el["addr_city"] = ('%s %s' % (tags.get('addr:city', ''), tags.get('addr:postcode', ''))).encode("utf-8")
   if 'addr:country' in tags:
     popup += '%s<br/>' % (tags.get('addr:country', ''))
+    json_el["addr_country"] = tags.get('addr:country', '').encode("utf-8")
+
   popup += '<hr/>'
   if 'contact:website' in tags:
     w = tags['contact:website']
     if not w.startswith('http'):
       w = 'http://' + w
     popup += 'website: <a href=\\"%s\\" target=\\"_blank\\">%s</a><br/>' % (w, w)
+    json_el["contact_website"] = w.encode("utf-8")
   elif 'website' in tags:
     w = tags['website']
     if not w.startswith('http'):
       w = 'http://' + w
     popup += 'website: <a href=\\"%s\\" target=\\"_blank\\">%s</a><br/>' % (w, w)
+    json_el["website"] = w.encode("utf-8")
   if 'contact:email' in tags:
     popup += 'email: <a href=\\"mailto:%s\\" target=\\"_blank\\">%s</a><br/>' % (tags['contact:email'], tags['contact:email'])
+    json_el["contact_email"] = tags['contact:email'].encode("utf-8")
   elif 'email' in tags:
     popup += 'email: <a href=\\"mailto:%s\\" target=\\"_blank\\">%s</a><br/>' % (tags['email'], tags['email'])
+    json_el["email"] = tags['email'].encode("utf-8")
   if 'contact:phone' in tags:
     popup += 'phone: %s<br/>' % (tags['contact:phone'])
+    json_el["contact_phone"] = tags['contact:phone'].encode("utf-8")
   elif 'phone' in tags:
     popup += 'phone: %s<br/>' % (tags['phone'])
+    json_el["phone"] = tags['phone'].encode("utf-8")
   if 'description' in tags:
     popup += 'description: %s<br/>' % (tags['description'])
+    json_el["description"] = tags['description'].encode("utf-8")
+
+
+
   f.write('  L.marker([%s, %s], {"title": "%s", icon: icon_%s}).bindPopup("%s").addTo(markers);\n' % (lat, lon, name.encode('utf-8'), icon, popup.encode('utf-8')))
+
+  json_el["lat"] = lat
+  json_el["lon"] = lon
+  json_el["icon"] = icon.encode("utf-8")
+
+  # dict to hold all the places, indexed by openstreetmap URLs
+  json_all[json_el["url"]] = json_el; 
 
   return True
 
 def get_points():
-  json = requests.get('http://overpass.osm.rambler.ru/cgi/interpreter?data=[out:json];(node["payment:bitcoin"=yes];way["payment:bitcoin"=yes];>;);out;').json()
-  return json['elements']
+  # RYM: now using local data (for dev)
+  #jsond = requests.get('http://overpass.osm.rambler.ru/cgi/interpreter?data=[out:json];(node["payment:bitcoin"=yes];way["payment:bitcoin"=yes];>;);out;').json()
+  
+  json_data=open("mine.dat")    # RYM: local dev data
+  jsond = json.load(json_data)  # RYM: local dev data
+
+  return jsond['elements']
 
 def write_markers(f):
   cnt = 0
+  json_all = {}
   for p in get_points():
-    if write_elements(f, p):
+    if write_elements(f, p, json_all):
       cnt += 1
   f.write('  document.getElementById("count").innerHTML = "<b>%d</b>";\n' % cnt);
+
+  # RYM TODO output to disk
+  #print json_all
+  pprint(json_all)
